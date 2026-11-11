@@ -1,0 +1,2 @@
+title: Bridge Status
+tooltip: Shows whether the Agent Bridge (pyRevit Routes) is reachable and on which port.

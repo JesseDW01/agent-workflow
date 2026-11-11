@@ -32,7 +32,10 @@ agent-workflow/
 ├── .agents/skills/              # Agent skills (Orchestrator, Worktree Worker, PR Reviewer)
 │   ├── ado-backlog-orchestrator/
 │   ├── ado-worktree-worker/
-│   └── ado-pr-reviewer/
+│   ├── ado-pr-reviewer/
+│   ├── revit-automation/        # Drive Revit: live pyRevit bridge, revit MCP, headless pyrevit run
+│   ├── freecad-automation/      # Drive FreeCAD via Python API / Robust MCP Bridge
+│   └── sketchup/                # Drive SketchUp Pro via sketchup-mcp2 + Ruby API
 └── docs/
     └── central-skill-management.md # Single-source-of-truth skill linking guide (Windows + devs7)
 ```
