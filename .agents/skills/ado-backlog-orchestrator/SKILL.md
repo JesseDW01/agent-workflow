@@ -49,10 +49,10 @@ For each work item in the current wave:
 1. **Mark In Progress:** Update the Azure DevOps work item state to `Active` and add tag `agent-working`.
 2. **Spawn Worker:**
    - **Inside Antigravity:** Use `invoke_subagent` (with `TypeName: "self"`, `Workspace: "share"` or instructing the worker to use `.agents/skills/ado-worktree-worker/SKILL.md`) in parallel.
-   - **Inside Herdr (`HERDR_ENV=1` or via `hc` / `herdr` CLI):** Create an isolated worktree space and start a parallel Herdr agent pane so its status (`working` / `blocked` / `done`) is tracked live in the Herdr sidebar:
-     ```bash
-     herdr worktree create feat/AB-<id>-<slug>
-     herdr agent start --space feat/AB-<id>-<slug> --prompt "<self-contained worker brief>"
+   - **Inside Herdr Core (`hc` CLI — local or `--on devs7`):** Provision the isolated git worktree first, then launch a background interactive agent terminal via `hc run --bg` so its OSC 7501 status (`working` / `blocked` / `done`) is tracked live in Herdr and you can wait on all parallel workers with `hc wait --children all`:
+     ```powershell
+     # Local or remote (--on devs7)
+     hc run --bg --name worker-ab-<id> --cwd <worktree-path> claude "Read and follow ~/.agents/skills/ado-worktree-worker/SKILL.md. <self-contained worker brief>. Report back with: hc send $env:HC_TERMINAL_ID '<summary>' when done or stuck."
      ```
 3. **Self-Contained Worker Brief:** Pass a complete, self-contained prompt containing:
    - Required skill activation: `Read and follow .agents/skills/ado-worktree-worker/SKILL.md`.

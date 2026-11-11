@@ -1,19 +1,21 @@
 # Links all skills from this repository (.agents/skills/*) into the user-scope
 # skill directories on Windows using Directory Junctions (no Admin required).
+# Also syncs to remote Herdr Core machines (e.g., devs7) via `hc exec --on <host>`.
 #
 # Targets:
-#   - ~/.agents/skills          (Universal Agent Skills / Herdr my-skills panel)
-#   - ~/.kimi-code/skills       (Kimi Code CLI inside Herdr terminals)
-#   - ~/.claude/skills          (Claude Code CLI inside Herdr terminals)
+#   - ~/.agents/skills             (Universal Agent Skills / Herdr my-skills panel / Codex)
+#   - ~/.kimi-code/skills          (Kimi Code CLI inside Herdr terminals)
+#   - ~/.claude/skills             (Claude Code CLI inside Herdr terminals)
 #   - ~/.gemini/config/skills.json (Antigravity global skill registry)
 #
 # Usage:
 #   .\link-skills.ps1
-#   .\link-skills.ps1 -RemoteHost devs7   # Also pulls & links on SSH host devs7
+#   .\link-skills.ps1 -RemoteHost devs7
 
 param(
     [string]$RemoteHost,
-    [string]$RemoteRepoPath = "~/git/agent-workflow"
+    [string]$RemoteRepoPath = "D:\Git\agent-workflow",
+    [string]$RepoUrl = "https://github.com/JesseDW01/agent-workflow.git"
 )
 
 $ErrorActionPreference = "Stop"
@@ -34,19 +36,28 @@ $TargetDirs = @(
 $SkillFolders = Get-ChildItem -Path $SkillsSource -Directory
 
 foreach ($TargetRoot in $TargetDirs) {
-    cmd /c "if not exist `"$TargetRoot`" mkdir `"$TargetRoot`""
+    [System.IO.Directory]::CreateDirectory($TargetRoot) | Out-Null
     foreach ($Skill in $SkillFolders) {
         $LinkPath = Join-Path $TargetRoot $Skill.Name
         $SourceDir = Join-Path $SkillsSource $Skill.Name
-        cmd /c "if exist `"$LinkPath`" rmdir `"$LinkPath`"" 2>$null
-        cmd /c "mklink /J `"$LinkPath`" `"$SourceDir`"" | Out-Null
-        Write-Host "[Windows] Linked $($Skill.Name) -> $LinkPath"
+        if ([System.IO.Directory]::Exists($LinkPath)) {
+            cmd /c rmdir "$LinkPath" 2>$null
+            if ([System.IO.Directory]::Exists($LinkPath)) {
+                [System.IO.Directory]::Delete($LinkPath, $true)
+            }
+        }
+        $mkOut = cmd /c mklink /J "$LinkPath" "$SourceDir" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "Failed to link $($Skill.Name) -> $LinkPath : $mkOut"
+        } else {
+            Write-Host "[$env:COMPUTERNAME] Linked $($Skill.Name) -> $LinkPath"
+        }
     }
 }
 
 # Register in Antigravity global skills.json (~/.gemini/config/skills.json)
 $GeminiConfigDir = Join-Path $env:USERPROFILE ".gemini\config"
-New-Item -ItemType Directory -Force -Path $GeminiConfigDir | Out-Null
+[System.IO.Directory]::CreateDirectory($GeminiConfigDir) | Out-Null
 $GeminiSkillsJson = Join-Path $GeminiConfigDir "skills.json"
 $NormalizedPath = $SkillsSource -replace '\\', '/'
 
@@ -56,10 +67,10 @@ $ConfigObj = @{
     )
 }
 $ConfigObj | ConvertTo-Json -Depth 5 | Set-Content -Path $GeminiSkillsJson -Encoding UTF8
-Write-Host "[Windows] Registered $NormalizedPath in $GeminiSkillsJson"
+Write-Host "[$env:COMPUTERNAME] Registered $NormalizedPath in $GeminiSkillsJson"
 
 if ($RemoteHost) {
-    Write-Host "`nSyncing and linking skills on remote SSH host '$RemoteHost'..."
-    $RemoteCmd = "if [ -d $RemoteRepoPath/.git ]; then git -C $RemoteRepoPath pull --ff-only; else mkdir -p `$(dirname $RemoteRepoPath) && git clone https://github.com/JesseDW01/agent-workflow.git $RemoteRepoPath; fi && bash $RemoteRepoPath/link-skills.sh"
-    ssh $RemoteHost $RemoteCmd
+    Write-Host "`nSyncing and linking skills on Herdr remote host '$RemoteHost' via hc..."
+    $RemoteScript = "if (Test-Path '$RemoteRepoPath\.git') { git -C '$RemoteRepoPath' pull --ff-only } else { git clone '$RepoUrl' '$RemoteRepoPath' }; powershell -ExecutionPolicy Bypass -File '$RemoteRepoPath\link-skills.ps1'"
+    hc exec --on $RemoteHost "powershell -NoProfile -ExecutionPolicy Bypass -Command `"$RemoteScript`""
 }
