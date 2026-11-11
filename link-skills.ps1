@@ -75,6 +75,6 @@ Write-Host "[$env:COMPUTERNAME] Registered $NormalizedPath in $GeminiSkillsJson"
 
 if ($RemoteHost) {
     Write-Host "`nSyncing and linking skills on Herdr remote host '$RemoteHost' via hc..."
-    $RemoteCmd = "if not exist `"$RemoteRepoPath\.git`" (git clone $RepoUrl `"$RemoteRepoPath`") else (git -C `"$RemoteRepoPath`" pull --ff-only) && powershell -NoProfile -ExecutionPolicy Bypass -File `"$RemoteRepoPath\link-skills.ps1`""
+    $RemoteCmd = "(if not exist `"$RemoteRepoPath\.git`" (git clone $RepoUrl `"$RemoteRepoPath`") else (git -C `"$RemoteRepoPath`" pull --ff-only)) & powershell -NoProfile -ExecutionPolicy Bypass -File `"$RemoteRepoPath\link-skills.ps1`""
     hc exec --on $RemoteHost $RemoteCmd
 }
