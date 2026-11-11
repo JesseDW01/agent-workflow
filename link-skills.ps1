@@ -18,7 +18,7 @@ param(
     [string]$RepoUrl = "https://github.com/JesseDW01/agent-workflow.git"
 )
 
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 $RepoRoot = $PSScriptRoot
 $SkillsSource = Join-Path $RepoRoot ".agents\skills"
 
@@ -36,21 +36,25 @@ $TargetDirs = @(
 $SkillFolders = Get-ChildItem -Path $SkillsSource -Directory
 
 foreach ($TargetRoot in $TargetDirs) {
+    $ParentDir = Split-Path -Parent $TargetRoot
+    # Repair any broken junctions on parent or target root before mkdir
+    cmd /c "dir `"$ParentDir`" >nul 2>nul || (rmdir `"$ParentDir`" >nul 2>nul & mkdir `"$ParentDir`" >nul 2>nul)"
+    cmd /c "dir `"$TargetRoot`" >nul 2>nul || (rmdir `"$TargetRoot`" >nul 2>nul & mkdir `"$TargetRoot`" >nul 2>nul)"
     [System.IO.Directory]::CreateDirectory($TargetRoot) | Out-Null
+
     foreach ($Skill in $SkillFolders) {
         $LinkPath = Join-Path $TargetRoot $Skill.Name
         $SourceDir = Join-Path $SkillsSource $Skill.Name
-        if ([System.IO.Directory]::Exists($LinkPath)) {
-            cmd /c rmdir "$LinkPath" 2>$null
-            if ([System.IO.Directory]::Exists($LinkPath)) {
-                [System.IO.Directory]::Delete($LinkPath, $true)
-            }
+        # Remove existing junction or directory if present
+        cmd /c "rmdir `"$LinkPath`" >nul 2>nul"
+        if (Test-Path $LinkPath) {
+            Remove-Item $LinkPath -Recurse -Force -ErrorAction SilentlyContinue
         }
-        $mkOut = cmd /c mklink /J "$LinkPath" "$SourceDir" 2>&1
-        if ($LASTEXITCODE -ne 0) {
-            Write-Warning "Failed to link $($Skill.Name) -> $LinkPath : $mkOut"
-        } else {
+        cmd /c "mklink /J `"$LinkPath`" `"$SourceDir`" >nul 2>nul"
+        if (Test-Path (Join-Path $LinkPath "SKILL.md")) {
             Write-Host "[$env:COMPUTERNAME] Linked $($Skill.Name) -> $LinkPath"
+        } else {
+            Write-Warning "[$env:COMPUTERNAME] Could not verify link at $LinkPath"
         }
     }
 }
@@ -71,6 +75,6 @@ Write-Host "[$env:COMPUTERNAME] Registered $NormalizedPath in $GeminiSkillsJson"
 
 if ($RemoteHost) {
     Write-Host "`nSyncing and linking skills on Herdr remote host '$RemoteHost' via hc..."
-    $RemoteScript = "if (Test-Path '$RemoteRepoPath\.git') { git -C '$RemoteRepoPath' pull --ff-only } else { git clone '$RepoUrl' '$RemoteRepoPath' }; powershell -ExecutionPolicy Bypass -File '$RemoteRepoPath\link-skills.ps1'"
-    hc exec --on $RemoteHost "powershell -NoProfile -ExecutionPolicy Bypass -Command `"$RemoteScript`""
+    $RemoteCmd = "if not exist `"$RemoteRepoPath\.git`" (git clone $RepoUrl `"$RemoteRepoPath`") else (git -C `"$RemoteRepoPath`" pull --ff-only) && powershell -NoProfile -ExecutionPolicy Bypass -File `"$RemoteRepoPath\link-skills.ps1`""
+    hc exec --on $RemoteHost $RemoteCmd
 }
