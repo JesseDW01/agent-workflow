@@ -34,18 +34,12 @@ $TargetDirs = @(
 $SkillFolders = Get-ChildItem -Path $SkillsSource -Directory
 
 foreach ($TargetRoot in $TargetDirs) {
-    New-Item -ItemType Directory -Force -Path $TargetRoot | Out-Null
+    cmd /c "if not exist `"$TargetRoot`" mkdir `"$TargetRoot`""
     foreach ($Skill in $SkillFolders) {
         $LinkPath = Join-Path $TargetRoot $Skill.Name
-        if (Test-Path $LinkPath) {
-            $Item = Get-Item $LinkPath -Force
-            if ($Item.LinkType -eq "Junction" -or $Item.LinkType -eq "SymbolicLink") {
-                $Item.Delete()
-            } else {
-                Remove-Item $LinkPath -Recurse -Force
-            }
-        }
-        New-Item -ItemType Junction -Path $LinkPath -Target $Skill.FullName | Out-Null
+        $SourceDir = Join-Path $SkillsSource $Skill.Name
+        cmd /c "if exist `"$LinkPath`" rmdir `"$LinkPath`"" 2>$null
+        cmd /c "mklink /J `"$LinkPath`" `"$SourceDir`"" | Out-Null
         Write-Host "[Windows] Linked $($Skill.Name) -> $LinkPath"
     }
 }
