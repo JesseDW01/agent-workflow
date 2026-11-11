@@ -8,7 +8,7 @@ deliver results over any channel (including voice), a **Q&A side-channel**, and 
 **scheduled improvement agent** that watches the whole system and proposes better
 skills, agents, and tools over time.
 
-See [FLOW.md](FLOW.md) for the full v1 design.
+See [FLOW.md](FLOW.md) for the full v1 design, [azure-devops-dev-flow.md](azure-devops-dev-flow.md) for the concrete Azure DevOps + Git Worktree + PR Review multi-agent pipeline, and [docs/central-skill-management.md](docs/central-skill-management.md) for syncing skills across local Windows, Herdr, and remote SSH hosts (`devs7`).
 
 ## Principles
 
@@ -24,7 +24,15 @@ See [FLOW.md](FLOW.md) for the full v1 design.
 
 ```
 agent-workflow/
-├── README.md          # This file
-├── FLOW.md            # The full workflow design and agent specs
-└── docs/              # Future deep-dives (per-agent specs, channel adapters, ...)
+├── README.md                    # This file
+├── FLOW.md                      # The full workflow design and agent specs
+├── azure-devops-dev-flow.md     # Azure DevOps Boards/Repos + Worktree + PR Review flow
+├── link-skills.ps1              # Links .agents/skills/* locally (Windows Junctions) & via SSH
+├── link-skills.sh               # Links .agents/skills/* on Linux/macOS SSH hosts (devs7)
+├── .agents/skills/              # Agent skills (Orchestrator, Worktree Worker, PR Reviewer)
+│   ├── ado-backlog-orchestrator/
+│   ├── ado-worktree-worker/
+│   └── ado-pr-reviewer/
+└── docs/
+    └── central-skill-management.md # Single-source-of-truth skill linking guide (Windows + devs7)
 ```
