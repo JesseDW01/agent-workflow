@@ -39,6 +39,28 @@ You are an isolated **Worker Agent** executing a single Azure DevOps Work Item (
 
 ---
 
+## 1b. Board Tracking (MANDATORY — the user follows your progress on the sprint taskboard)
+
+Move the cards **while you work**, not in one batch at the end. Use the shared helper:
+```powershell
+$board = "$HOME\.agents\skills\ado-backlog-orchestrator\scripts\ado-board.ps1"
+$a = @{ Org = '<Org>'; Project = '<Project>'; Team = '<Team>' }
+& $board -Action current @a   # prints the sprint path; if it fails, ask the orchestrator (it runs -Action ensure)
+```
+
+1. **On start:** make sure the PBI/Bug and all child Tasks are in the current sprint and the PBI is `Committed` (Agile: `Active`) with tag `agent-working`:
+   ```powershell
+   & $board -Action assign @a -Id <WorkItemId> -WithChildren
+   & $board -Action move   @a -Id <WorkItemId> -State Committed -AddTags agent-working -Comment "Started by <worker> on feat/AB-<id>-<slug>"
+   ```
+2. **Before starting each Task:** `& $board -Action move @a -Id <taskId> -State "In Progress" -Remaining <hours> -Activity Development` (use `Testing`/`Documentation` where appropriate). Only the Task(s) you are actually working on are `In Progress`.
+3. **When a Task is finished** (tests green, committed): `& $board -Action move @a -Id <taskId> -State Done -Comment "Done in <sha>: <one line>"` (sets `RemainingWork` 0).
+4. **Discovered work** that is out of scope: create a new Task under the PBI (or a follow-up PBI under the Feature) in the current sprint, state `To Do`/`New` — never silently skip it.
+5. **Blocked:** keep the Task `In Progress`, add tag `blocked` to the PBI and a comment saying exactly what is needed.
+6. **Never** set the PBI to `Done` yourself — the reviewer does that after merge. Never leave a Task `To Do` that you have actually completed.
+
+---
+
 ## 2. Implementation Workflow (New Feature / Bug)
 
 Follow strict **Red-Green-Refactor Test-Driven Development** (adapted from `obra/superpowers`):
@@ -85,7 +107,8 @@ If your brief includes a `PullRequestId` and unresolved review threads:
      - **Description:** Summarize what was implemented, how each Acceptance Criterion was verified, and link `AB#<WorkItemId>`.
      - **Work Item Link:** Explicitly link `WorkItemId` to the PR.
 4. **Update Work Item State:**
-   - Via MCP (`wit_update_work_item`), set the Work Item state to `Resolved` (or `In Review`), remove tag `changes-requested` if present, and add tag `pr-open`.
+   - Keep the PBI `Committed` (Agile: `Resolved`/`In Review`), remove tag `changes-requested` if present, add tag `pr-open`, and comment with the PR link (`move -AddTags pr-open -RemoveTags changes-requested -Comment "PR !<id> opened"`).
+   - Every Task you completed must already be `Done`; any Task you could not finish stays `In Progress` with honest `RemainingWork` and is listed in the PR description.
 
 ---
 
@@ -97,3 +120,4 @@ Report back to the Orchestrator with a concise structured block (note: the Revie
 - `Branch`: `feat/AB-<id>-<slug>`
 - `PullRequestId`: `<PR ID>`
 - `VerificationSummary`: Exact test commands run and pass counts.
+- `BoardState`: each Task ID with its final state (must match the board).

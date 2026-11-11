@@ -67,13 +67,14 @@ For every distinct Bucket B item, create a new Work Item on the Azure DevOps bac
    - **Description:** Explain the context discovered during the review of `AB#<WorkItemId>` (including file paths and line numbers).
    - **Acceptance Criteria:** Write concrete, testable acceptance criteria so a future `ado-worktree-worker` can implement it via TDD without ambiguity.
    - **Link:** Link the new work item as a `Child` or `Related` item to `AB#<WorkItemId>` (or its parent Feature/Epic) and set state to `New` / `Ready`.
+   - **Sprint:** put it in the current sprint (`ado-board.ps1 -Action assign`) when it should be picked up by the running loop; otherwise leave it in the backlog and say so in the summary.
 
 ### Step 2: Apply the PR Decision
 
 #### Path 1: `FAIL` (One or more Bucket A Blocking Defects)
 1. **Post Inline PR Review Threads:** For each Bucket A defect, call MCP `repo_create_pull_request_thread` attached to the specific file path and line range with status `Active` (`1`). State clearly what is wrong and how to verify the fix.
 2. **Set Reviewer Vote:** Set PR vote to `Wait for author (-5)` (or `Rejected (-10)` for severe regressions).
-3. **Update Work Item for Rework:** Update `AB#<WorkItemId>` state to `Active`, remove tag `pr-open`, and add tag `changes-requested`.
+3. **Update Work Item for Rework:** Keep `AB#<WorkItemId>` `Committed` (Agile: `Active`), remove tag `pr-open`, add tag `changes-requested`, and move the Task(s) the defects belong to back to `In Progress` so the board shows the rework.
 
 #### Path 2: `PASS` or `PASS_WITH_FOLLOWUPS` (Zero Bucket A Blocking Defects)
 1. **Verify All Prior Threads Resolved:** Ensure any previously active review threads on the PR are marked `Fixed` or `Closed`.
@@ -81,7 +82,14 @@ For every distinct Bucket B item, create a new Work Item on the Azure DevOps bac
 3. **Approve & Merge PR:**
    - Set PR vote to `Approved (10)`.
    - Complete/merge the PR into the target branch (with `deleteSourceBranch: true` and squash/merge strategy matching repo policy).
-4. **Close Work Item:** Transition `AB#<WorkItemId>` to `Closed` / `Done` and remove `agent-working` / `pr-open` tags.
+4. **Close Work Item and its Tasks (board must be truthful):**
+   ```powershell
+   $board = "$HOME\.agents\skills\ado-backlog-orchestrator\scripts\ado-board.ps1"
+   $a = @{ Org = '<Org>'; Project = '<Project>'; Team = '<Team>' }
+   & $board -Action move @a -Id <every child Task id> -State Done
+   & $board -Action move @a -Id <WorkItemId> -State Done -RemoveTags "agent-working;pr-open;changes-requested" -Comment "Merged in PR !<id> (<merge sha>)"
+   ```
+   Only close Tasks whose work is actually in the merged PR; an unfinished Task becomes a follow-up (Step 1) instead of a fake `Done`. Finish with `& $board -Action audit @a -Id <WorkItemId>` and confirm `0 issue(s)`.
 
 ---
 
