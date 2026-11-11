@@ -65,7 +65,9 @@ function ParentId($w) {
 function Patch([int]$wid, $ops) {
   if ($ops.Count) { Api PATCH "https://dev.azure.com/$Org/_apis/wit/workitems/$($wid)?api-version=7.1" ([System.Collections.ArrayList]$ops) 'application/json-patch+json' | Out-Null }
 }
-function Set-Field($ops, $f, $v) { [void]$ops.Add(@{ op = 'add'; path = "/fields/$f"; value = $v }) }
+function Set-Field($ops, $f, $v, $op = 'add') { [void]$ops.Add(@{ op = $op; path = "/fields/$f"; value = $v }) }
+# Done Tasks must have an empty Remaining Work (rule InvalidNotEmpty); remove the value instead of setting 0.
+function Clear-Remaining($ops, $w) { if ($null -ne $w.fields.'Microsoft.VSTS.Scheduling.RemainingWork') { [void]$ops.Add(@{ op = 'remove'; path = '/fields/Microsoft.VSTS.Scheduling.RemainingWork' }) } }
 function Descendants([int]$root) {
   $q = @{ query = "SELECT [System.Id] FROM WorkItemLinks WHERE [Source].[System.Id] = $root AND [System.Links.LinkType] = 'System.LinkTypes.Hierarchy-Forward' MODE (Recursive)" }
   (Api POST "$B/_apis/wit/wiql?api-version=7.1" $q).workItemRelations | ForEach-Object { [int]$_.target.id } | Sort-Object -Unique
@@ -108,14 +110,14 @@ switch ($Action) {
       $w = (GetItems @($wid))[0]; $o = [Collections.ArrayList]::new()
       if ($State) { Set-Field $o 'System.State' $State }
       if ($Remaining -ge 0) { Set-Field $o 'Microsoft.VSTS.Scheduling.RemainingWork' $Remaining }
-      elseif ($State -eq 'Done' -and $w.fields.'System.WorkItemType' -eq 'Task') { Set-Field $o 'Microsoft.VSTS.Scheduling.RemainingWork' 0 }
+      elseif ($State -eq 'Done' -and $w.fields.'System.WorkItemType' -eq 'Task') { Clear-Remaining $o $w }
       if ($Activity) { Set-Field $o 'Microsoft.VSTS.Common.Activity' $Activity }
       if ($sp -and $w.fields.'System.IterationPath' -ne $sp) { Set-Field $o 'System.IterationPath' $sp }
       if ($AddTags -or $RemoveTags) {
         $tags = @(($w.fields.'System.Tags' -split ';') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
         if ($RemoveTags) { $rm = $RemoveTags -split ';' | ForEach-Object { $_.Trim() }; $tags = @($tags | Where-Object { $_ -notin $rm }) }
         if ($AddTags) { $tags += $AddTags -split ';' | ForEach-Object { $_.Trim() } }
-        Set-Field $o 'System.Tags' (($tags | Sort-Object -Unique) -join '; ')
+        Set-Field $o 'System.Tags' (($tags | Sort-Object -Unique) -join '; ') 'replace'
       }
       Patch $wid $o
       if ($Comment) { Api POST "$B/_apis/wit/workItems/$wid/comments?api-version=7.1-preview.4" @{ text = $Comment } | Out-Null }
@@ -131,7 +133,7 @@ switch ($Action) {
       $pid_ = ParentId $w; $p = if ($pid_) { $items[$pid_] }
       $ps = if ($p) { $p.fields.'System.State' }
       $o = [Collections.ArrayList]::new(); $why = @()
-      if ($t -eq 'Task' -and $s -ne 'Done' -and $ps -eq 'Done') { $why += "Task $s under Done PBI"; Set-Field $o 'System.State' 'Done'; Set-Field $o 'Microsoft.VSTS.Scheduling.RemainingWork' 0 }
+      if ($t -eq 'Task' -and $s -ne 'Done' -and $ps -eq 'Done') { $why += "Task $s under Done PBI"; Set-Field $o 'System.State' 'Done'; Clear-Remaining $o $w }
       if ($t -eq 'Task' -and $s -in 'In Progress', 'Done' -and $ps -in 'New', 'Approved') {
         $why += "Task $s under $ps PBI AB#$($p.id) (PBI -> Committed)"
         if ($Fix) { $po = [Collections.ArrayList]::new(); Set-Field $po 'System.State' 'Committed'; Patch $p.id $po; $p.fields.'System.State' = 'Committed' }
